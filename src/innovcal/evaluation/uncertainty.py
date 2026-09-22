@@ -21,9 +21,18 @@ def _origin_scores(
     first = np.linalg.norm(samples - target[None], axis=-1).mean(axis=0)
     permutation = np.random.default_rng(123).permutation(len(samples))
     second = np.linalg.norm(samples - samples[permutation], axis=-1).mean(axis=0)
+    left, right = np.triu_indices(target.shape[1], k=1)
+    variogram = np.mean(
+        (
+            np.abs(target[:, left] - target[:, right]) ** 0.5
+            - np.mean(np.abs(samples[:, :, left] - samples[:, :, right]) ** 0.5, axis=0)
+        ) ** 2,
+        axis=1,
+    )
     return {
         "mean_squared_error": np.mean((samples.mean(axis=0) - target) ** 2, axis=1),
         "energy_score": first - 0.5 * second,
+        "variogram_score": variogram,
         "interval_score": interval.mean(axis=1),
         "interval_width": (upper - lower).mean(axis=1),
         "coverage": ((target >= lower) & (target <= upper)).mean(axis=1),

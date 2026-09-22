@@ -13,6 +13,8 @@ from innovcal.ca_rnn import (
     CARNNConfig,
     TrainingConfig,
     fit_model,
+    predict_distribution,
+    predictive_nll,
     sample_forecasts,
 )
 from innovcal.ca_rnn.losses import make_projection_matrix
@@ -22,7 +24,11 @@ from innovcal.data.windows import (
     chronological_split,
     partition_window_datasets,
 )
-from innovcal.evaluation import evaluate_samples
+from innovcal.evaluation import (
+    evaluate_samples,
+    gaussian_projected_pits,
+    pit_diagnostics,
+)
 
 
 @dataclass
@@ -136,11 +142,21 @@ def run_frequentist_seed_comparison(
             metrics = evaluate_samples(
                 target, samples, projections=projections.cpu().numpy()
             )
+            mean, scale = predict_distribution(model, context)
+            analytic_pits = gaussian_projected_pits(
+                target,
+                mean[0].cpu().numpy(),
+                scale[0].cpu().numpy(),
+                projections.cpu().numpy(),
+            )
+            analytic = pit_diagnostics(analytic_pits)
             rows.append(
                 {
                     "training_seed": training_seed,
                     "model": name,
                     "best_epoch": fitted.best_epoch,
+                    "test_nll": predictive_nll(model, context, target_tensor),
+                    **{f"analytic_{key}": value for key, value in analytic.items()},
                     **metrics,
                 }
             )
@@ -227,12 +243,25 @@ def run_regime_seed_comparison(
             samples = sample_forecasts(
                 model, context, n_forecast_samples
             ).cpu().numpy()
+            mean, scale = predict_distribution(model, context)
             rows.append(
                 {
                     "regime": regime.name,
                     "training_seed": training_seed,
                     "model": name,
                     "best_epoch": fitted.best_epoch,
+                    "test_nll": predictive_nll(model, context, target_tensor),
+                    **{
+                        f"analytic_{key}": value
+                        for key, value in pit_diagnostics(
+                            gaussian_projected_pits(
+                                target,
+                                mean[0].cpu().numpy(),
+                                scale[0].cpu().numpy(),
+                                projections.cpu().numpy(),
+                            )
+                        ).items()
+                    },
                     **evaluate_samples(
                         target, samples, projections=projections.cpu().numpy()
                     ),

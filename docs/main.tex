@@ -48,7 +48,8 @@ model averaging is not guaranteed to remain calibrated when the likelihood, prio
 or conditional dynamics are misspecified. This paper develops the
 Calibration-Aware Recurrent Neural Network (CA-RNN), adapting the
 calibration-aware learning framework of Huang, Park, and
-Simeone to continuous multivariate forecasting. The proposed training criterion
+Simeone and existing differentiable regression and multivariate pre-rank
+regularization to sequential multivariate forecasting. The training criterion
 augments joint negative log likelihood with a differentiable discrepancy between
 projected probability integral transforms (PITs) and the uniform distribution
 and a temporal penalty on selected lagged PIT moments. CA-RNN is a conditional
@@ -56,7 +57,11 @@ stochastic forecasting model: its recurrent
 state parameterizes a predictive distribution from which future observations can
 be sampled. The empirical design compares RNN, Bayesian RNN, CA-RNN, and
 calibration-aware Bayesian RNN, and then extends the comparison to model
-misspecification and distribution shift. A frozen replication on a disjoint
+misspecification and distribution shift. In a post-protocol simulation with 50
+independent datasets and an isolated innovation-scale shift, CA-RNN and RNN
+perform similarly at zero shift, whereas CA-RNN has lower Energy Score,
+variogram score, interval score, test negative log likelihood, and analytic
+projected-PIT calibration error at both shifted severities. A frozen replication on a disjoint
 four-asset panel confirms a smaller projected-PIT calibration improvement, but
 finds significantly worse MSE, Energy Score, interval score, and PIT temporal
 dependence than the likelihood-trained RNN. A VAR with marginal GARCH$(1,1)$
@@ -124,6 +129,18 @@ This question is decomposed into three focused empirical questions:
     market regimes, as measured by projected and sequential calibration, Energy
     Score, interval score, coverage, and point-forecast error?
 \end{enumerate}
+
+\subsection{Contributions and novelty boundary}
+
+This study adapts differentiable projected-PIT regularization to a recurrent
+conditional-density model trained on ordered multivariate observations. Its
+sequential extension adds lagged PIT-moment restrictions. The empirical
+contribution is a frozen comparison with likelihood-only recurrent and
+VAR--GARCH forecasts, including an isolated scale-shift simulation,
+chronological regimes, external-panel replication, and proper-score checks.
+Neither differentiable PIT regularization for regression nor multivariate
+pre-rank regularization is introduced here as a general new method; both have
+direct precedents \cite{utpala2020quantile,dheur2023large,laajil2026prerank}.
 
 \subsection{Scope and non-claims}
 
@@ -214,8 +231,13 @@ outcomes, Kuleshov, Fenner, and Ermon \cite{kuleshov2018regression} propose a
 post-hoc recalibration procedure for predictive cumulative distribution
 functions and demonstrate it with deep regression and recurrent models.  These
 papers establish that calibration can be measured or corrected in neural
-systems, but they also illustrate the distinction between post-hoc marginal
-recalibration and joint, sequential calibration-aware estimation.
+systems. In-training regression calibration also has direct precedents:
+quantile regularization penalizes departures from calibrated predictive
+quantiles \cite{utpala2020quantile}; Dheur and Ben Taieb study differentiable
+regression regularizers, including a smoothed empirical PIT-CDF discrepancy
+\cite{dheur2023large}, and subsequently integrate recalibration into neural
+regression training \cite{dheur2024design}. A differentiable PIT-based loss is
+therefore not, by itself, a novel contribution of CA--RNN.
 
 Huang, Park, and Simeone \cite{huang2024cabl} bring calibration directly into
 Bayesian neural learning.  Their calibration-aware objective combines a
@@ -228,13 +250,29 @@ mechanical.  Forecast observations are ordered and dependent, predictive
 covariance matters, and a multivariate law cannot be validated by marginal
 coverage alone.
 
+\subsection{Multivariate pre-rank calibration and regularization}
+
+Pre-rank functions reduce multivariate forecast--outcome pairs to scalar
+diagnostics whose PIT-like distribution can be checked for uniformity. Allen,
+Ziegel, and Ginsbourger develop this perspective for multivariate forecast
+assessment \cite{allen2024multivariate}. More directly, recent multi-output
+regression work develops differentiable pre-rank regularization for training
+multivariate predictive distributions \cite{desobry2025prerank,laajil2026prerank}.
+Those formulations include smoothed empirical PIT-CDF penalties; neither
+projection nor smoothing is claimed here as a new general multivariate
+calibration device. CA--RNN uses fixed linear projections as a narrower set of
+pre-ranks. Its adaptation concerns history-dependent recurrent forecasting on
+ordered data, the additional lagged PIT-moment penalty, and evaluation under
+misspecification and distribution shift. Finite pooled restrictions still do
+not establish calibration conditional on every forecast history.
+
 \subsection{Probabilistic recurrent forecasting, misspecification, and shift}
 
 DeepAR demonstrates that autoregressive recurrent networks can estimate
 conditional predictive distributions by likelihood and share information across
 related series \cite{salinas2020deepar}.  CA--RNN adopts the recurrent
-conditional-density perspective but uses a joint multivariate Gaussian head and
-a variational parameter distribution, then augments likelihood-based estimation
+conditional-density perspective but uses a joint multivariate Gaussian head,
+then augments likelihood-based estimation
 with calibration restrictions.  This separation is consequential under
 misspecification.  White \cite{white1982misspecification} shows that maximum
 likelihood estimation under a misspecified family generally converges to a
@@ -255,19 +293,18 @@ a standard econometric model already represents directly.
 
 \subsection{Positioning of the present study}
 
-Taken together, the literature supplies mature tools for proper forecast
-evaluation, PIT-based density diagnostics, neural recalibration, recurrent
-probabilistic prediction, and uncertainty evaluation under shift.  The present
-study combines these tools to ask a narrower unresolved question: whether an
-in-training calibration penalty for a Bayesian recurrent forecaster improves
-joint probabilistic forecasts when the model is misspecified or the data regime
-changes.  Its contribution is therefore methodological and diagnostic rather
-than a claim that finite projected calibration identifies the true multivariate
-law.  The confirmatory design deliberately tests whether improvement in the
-optimized projected criterion transfers to proper scores, interval quality,
-tail-risk estimates, and an external asset panel.  The observed failure of that
-transfer is itself informative about the limits of calibration-aware objectives
-for dependent continuous outcomes.
+The literature already supplies differentiable calibration regularizers for
+continuous regression and multivariate pre-rank methods, as well as recurrent
+probabilistic prediction and PIT-based forecast diagnostics. The present study
+asks whether adapting a projected-PIT penalty to sequential recurrent
+forecasting, with an added temporal moment term, improves joint forecasts when
+the model is misspecified or the data regime changes. The primary contrast is
+the likelihood-trained RNN against CA--RNN; Bayesian variants support the
+methodological comparison. The confirmatory design tests whether gains in the
+optimized projected criterion transfer to proper scores, interval quality,
+tail-risk estimates, and an external asset panel. Its mixed findings delimit
+this adaptation rather than establishing a new general multivariate
+calibration method.
 
 \section{Forecasting Setup and Calibration}
 
@@ -424,8 +461,8 @@ Cram\'er--Wold device identifies the joint distribution; a finite projection set
 only provides a tractable approximation and diagnostic.
 \end{remark}
 
-Training uses the analytic Gaussian PIT above. Out-of-sample evaluation instead
-uses the common sample-rank approximation
+Training uses the analytic Gaussian PIT above. The frozen external-panel
+out-of-sample evaluation uses the common sample-rank approximation
 \[
  \widehat U_{t,r}=\frac{\sum_{s=1}^{S}
  \ind\{a_r^{\mathsf T}Y_{t+1}^{(s)}<a_r^{\mathsf T}Y_{t+1}\}+1/2}{S+1},
@@ -433,6 +470,9 @@ uses the common sample-rank approximation
 with $S=500$ predictive draws. This supports the same diagnostic for deterministic
 Gaussian forecasts and Bayesian posterior-predictive mixtures, at the cost of
 finite-simulation error.
+The post-protocol evaluation audit additionally computes exact projected PITs
+for deterministic Gaussian neural forecasts; these are reported separately
+rather than substituted for the frozen sample-rank outcome.
 
 \section{Calibration-Aware RNN Methodology}
 
@@ -466,9 +506,14 @@ For a consecutive training batch $B$, define
 \right]^2.
 \label{eq:cal-loss}
 \end{equation}
-This is a grid approximation to an integrated squared CDF discrepancy, analogous
-in purpose---but not in definition---to the differentiable AECE used for
-classification in \cite{huang2024cabl}.
+This is a grid approximation to an integrated squared CDF discrepancy. Its
+smoothed empirical PIT-CDF form belongs to the differentiable regression and
+multivariate pre-rank regularization family
+\cite{dheur2023large,desobry2025prerank,laajil2026prerank}; it is analogous
+in purpose, but not in definition, to the classification AECE in
+\cite{huang2024cabl}. The present instantiation uses fixed linear projections
+and analytic Gaussian CDFs within a recurrent conditional forecast, rather
+than proposing the discrepancy as a new general-purpose penalty.
 
 \begin{proposition}[Differentiability]
 If the network outputs are differentiable in $\theta$ and
@@ -960,8 +1005,9 @@ from the nominal level before differencing.
 
 \subsection{Stress families}
 
-The following are prospective isolated stress families for a confirmatory study;
-they were not all executed factorially in the present experiments:
+The following stress families distinguish mechanisms; only the first has been
+executed as a replicated isolated-factor experiment, and none has been executed
+as a full factorial study:
 \begin{enumerate}
     \item \textbf{Scale shift:} innovation covariance is multiplied by a severity
     function while dependence is held fixed.
@@ -975,11 +1021,17 @@ they were not all executed factorially in the present experiments:
     in recurrent coefficients alter the conditional location.
 \end{enumerate}
 
-The implemented developmental curve uses common random numbers and jointly changes
+The initial developmental curve uses common random numbers and jointly changes
 scale and common correlation. Models are selected without examining its stressed
-test metrics and are frozen after fitting at $\delta=0$. Tail, volatility, and
-mean-dynamics regimes appear in separate developmental simulations, not in a
-completed isolated-factor robustness experiment.
+test metrics and are frozen after fitting at $\delta=0$. The completed
+post-protocol experiment isolates scale: 50 independent reference datasets are
+generated, paired RNN and CA--RNN models are fitted on each unshifted training
+history, and the same fitted models are evaluated at scale severities
+$\delta\in\{0,0.5,1\}$. The innovation standard deviation becomes $1+\delta$
+times its reference value only in the test partition; correlation, transition
+coefficients, and innovation family remain fixed. Tail, volatility, and
+mean-dynamics regimes appear in separate developmental simulations, not in this
+isolated-factor experiment.
 
 \subsection{Robustness estimands}
 
@@ -987,17 +1039,20 @@ For paired realization $b$, method $m$, comparator $c$, and metric $M$, define
 \[
 D_b^{m,c}(\delta)=M_b^m(\delta)-M_b^c(\delta).
 \]
-For a future experiment with $B$ independent DGP realizations, the intended
-summary is
+For the completed isolated-scale experiment with $B=50$ independent DGP
+realizations, the summary is
 \[
 \overline D^{m,c}(\delta)=\frac1B\sum_{b=1}^B D_b^{m,c}(\delta),
 \qquad
 \operatorname{MCSE}(\overline D)=
 \frac{s_D(\delta)}{\sqrt B}.
 \]
-Neural-seed repetitions on a prespecified subset separate DGP variability from
-optimization variability. Failure frequencies and runtimes are part of the
-estimand rather than discarded implementation details.
+One distinct neural seed is assigned to each DGP realization; thus the reported
+MCSE includes both DGP and optimization variation but does not identify their
+separate contributions. Failure frequencies and runtimes are reported rather
+than discarded implementation details. The comparison is developmental because
+the model weights and shift family were selected after earlier exploratory
+analyses; it is not an additional frozen confirmatory replication.
 
 \section{Experimental Design}
 
@@ -1159,8 +1214,9 @@ a pristine preregistered confirmatory experiment.
 
 \subsection{Status of the evidence}
 
-The lambda sweep, ablation, original-panel ten-seed study, rolling windows, and
-synthetic stress curve are developmental or internal-validation evidence. They
+The lambda sweep, ablation, original-panel ten-seed study, rolling windows,
+single-realization mixed-shift curve, and replicated isolated-scale experiment
+are developmental or internal-validation evidence. They
 condition on a specification informed by earlier results. The external-panel
 replication is confirmatory for its single primary contrast: CA-RNN
 minus RNN on MSFT, BAC, CVX, and COST under the protocol frozen in
@@ -1210,7 +1266,7 @@ intervals. The diagnostic figures include:
 
 The implementation tests cover tensor dimensions, covariance
 positive-definiteness, loss evaluation, forecasting, chronological data handling,
-traditional baselines, and paired-bootstrap identities. Twenty-four automated
+traditional baselines, and paired-bootstrap identities. Thirty-one automated
 tests pass. The notebooks also
 completed the simulation, shift, financial, optimization-seed, and rolling-regime
 workflows. Successful execution establishes implementation consistency but is not
@@ -1268,13 +1324,67 @@ provide a general predictive improvement or establish PIT independence.
 
 \subsection{Misspecification and distribution shift}
 
+The replicated scale-only experiment completed all 50 independent DGP
+realizations and 100 neural fits without recorded failures. Table~\ref{tab:isolated-scale}
+reports paired CA--RNN-minus-RNN differences, with Monte Carlo standard errors
+in parentheses. At zero shift, the Energy Score difference is essentially zero:
+$-0.00011$ with MCSE $0.00079$. Its interval-score difference is $+0.00311$
+(MCSE $0.00435$), and analytic projected-PIT calibration differs by
+$-0.000025$ (MCSE $0.000024$). This is nominal near-parity, not evidence of
+uniform CA--RNN dominance: its zero-shift test NLL is higher by $0.00629$
+(MCSE $0.00277$) and its variogram score is higher by $0.000414$
+(MCSE $0.000107$).
+
+At severity $0.5$, CA--RNN has lower Energy Score by $0.01624$ (MCSE $0.00152$),
+interval score by $0.29711$ (MCSE $0.01749$), variogram score by $0.00764$
+(MCSE $0.00040$), analytic projected-PIT calibration error by $0.00124$
+(MCSE $0.000065$), and test NLL by $0.22506$ (MCSE $0.01534$). At severity
+$1$, the corresponding advantages increase to $0.02924$, $0.55844$, $0.01543$,
+$0.00178$, and $0.57664$, respectively. Component-averaged MSE also favors
+CA--RNN under both shifts, but by smaller amounts: $-0.00644$ (MCSE $0.00260$)
+and $-0.01485$ (MCSE $0.00429$). All absolute proper scores and calibration
+errors worsen as scale rises for both methods; the finding is less degradation
+for CA--RNN, not immunity to shift. The signs of the principal shifted effects
+persist in the 10-, 25-, and 50-realization prefixes, although the earliest
+prefix gives somewhat larger effect magnitudes. No inference is made about
+correlation-only, tail, or mean-dynamics shifts from this experiment.
+
+\begin{table}[ht]
+\centering
+\caption{Isolated Gaussian innovation-scale shift over 50 independent paired
+realizations. Each entry is the mean CA--RNN-minus-RNN difference with its realization-level
+Monte Carlo standard error in parentheses; negative values favor CA--RNN.}
+\label{tab:isolated-scale}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Severity & Energy Score & Variogram & Interval score & Analytic PIT error \\
+\midrule
+$0$ & $-0.00011\,(0.00079)$ & $+0.000414\,(0.000107)$ & $+0.00311\,(0.00435)$ & $-0.000025\,(0.000024)$ \\
+$0.5$ & $-0.01624\,(0.00152)$ & $-0.007638\,(0.000400)$ & $-0.29711\,(0.01749)$ & $-0.001241\,(0.000065)$ \\
+$1$ & $-0.02924\,(0.00215)$ & $-0.015428\,(0.000766)$ & $-0.55844\,(0.02850)$ & $-0.001781\,(0.000090)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+\IfFileExists{../results/isolated_scale_shift/paired_shift_profiles.png}{%
+\includegraphics[width=0.84\textwidth]{../results/isolated_scale_shift/paired_shift_profiles.png}%
+}{\fbox{Run notebook 14 to generate the isolated-scale paired profiles.}}
+\caption{Paired CA--RNN-minus-RNN differences across scale severity. Error bars
+show $\pm1.96$ Monte Carlo standard errors across independent DGP realizations;
+they do not cover uncertainty over alternative DGP families or tuning choices.}
+\label{fig:isolated-scale}
+\end{figure}
+
 The frozen-model experiment jointly increased innovation scale and common
 correlation from severity zero to one. All specifications deteriorated. At zero,
 RNN had Energy Score 1.2022, interval score 3.8595, and projected calibration
 error 0.000866, compared with 1.2039, 3.9311, and 0.001345 for CA-RNN.
 At maximum severity, the ordering reversed: RNN obtained 2.3789, 10.5168, and
 0.009528, while CA-RNN obtained 2.3474, 10.0759, and 0.007717. This
-single-seed combined stress is developmental evidence rather than an isolated
+single-seed combined stress is exploratory evidence rather than an isolated
 causal test of scale or dependence. Absolute levels and paired degradation are
 considered together because a worse nominal starting point can mechanically
 reduce measured deterioration.
@@ -1314,6 +1424,52 @@ $0.00317$, interval score by $0.03749$, and coverage error by $0.01032$ relative
 to the temporal-penalty-removal ablation; every corresponding hierarchical
 interval excluded zero. It repairs a
 substantial part, but not all, of the cost of marginal calibration.
+
+\subsection{Post-protocol financial evaluation audit}
+
+The repeated original-panel fits were reevaluated with the exact projected
+Gaussian PIT and held-out joint NLL. Table~\ref{tab:financial-audit} separates
+these audit outcomes from the frozen sample-rank diagnostics. Analytic projected
+calibration improves from $0.001439$ for RNN to $0.001223$ for CA--RNN, with
+the latter lower for all ten optimization seeds. This agrees closely with the
+sample-rank ordering ($0.001438$ versus $0.001225$), so the finite forecast-draw
+PIT approximation does not explain the developmental calibration effect.
+Nevertheless, CA--RNN has higher mean test NLL ($5.3095$ versus $5.2713$),
+component-averaged MSE ($0.8986$ versus $0.8833$), and Energy Score ($1.1531$
+versus $1.1450$). The variogram scores are nearly tied ($0.156705$ versus
+$0.156821$), giving no clear dependence-sensitive proper-score advantage to
+either method on the original panel. Analytic projected-PIT mean absolute
+autocorrelation is higher for CA--RNN ($0.03691$ versus $0.03072$), despite the
+temporal penalty. The audit thus strengthens, rather than reverses, the
+calibration--predictive-quality distinction.
+
+\begin{table}[ht]
+\centering
+\caption{Original-panel post-protocol evaluation audit: means across ten
+matched neural seeds. All entries are losses or diagnostic discrepancies for
+which lower is better. MSE and RMSE are distinct summaries.}
+\label{tab:financial-audit}
+\begin{tabular}{lrrrrr}
+\toprule
+Model & MSE & RMSE & Test NLL & Variogram & Analytic PIT error \\
+\midrule
+RNN & 0.8833 & 0.9399 & 5.2713 & 0.156821 & 0.001439 \\
+CA--RNN & 0.8986 & 0.9479 & 5.3095 & 0.156705 & 0.001223 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Using saved matched forecasts, a post-protocol block-length check repeated the
+hierarchical seed-and-origin bootstrap with blocks of 10, 20, and 40 trading
+days. The sign and zero-exclusion decision were stable across these lengths for
+MSE (CA--RNN worse), Energy Score (worse), and sample-rank projected-PIT
+calibration error (better). Interval-score and variogram-score differences
+remained unresolved at all three lengths. Temporal PIT-dependence inference was
+less reliable: the zero-exclusion decision changed between 10-day and longer
+blocks, and the block-resampled interval was displaced from the observed point
+difference. Artificial block boundaries can perturb lagged covariance, so this
+bootstrap is not used as decisive evidence for temporal PIT adequacy. These
+sensitivity analyses do not alter the frozen external-panel estimands or results.
 
 \subsection{Conventional-baseline results}
 
@@ -1586,6 +1742,18 @@ Fourth, VAR--GARCH shows that explicit volatility dynamics and joint residual
 resampling can provide better-calibrated uncertainty than direct calibration
 regularization in these data.
 
+The replicated isolated-scale experiment provides a complementary and more
+specific robustness finding. Across 50 independent Gaussian DGP realizations,
+CA--RNN offers little nominal proper-score advantage but degrades less than RNN
+when only test innovation scale rises. Its shifted gains span joint NLL, Energy
+Score, variogram score, marginal interval score, and analytic projected-PIT
+calibration, rather than a single diagnostic. This does not contradict the
+frozen financial replication: the simulation isolates one known perturbation
+of a Gaussian autoregression, while the external asset panel combines unknown
+volatility, tail, dependence, and mean changes. The post-protocol simulation
+therefore establishes a boundary at which the fixed CA--RNN objective helps,
+not a general claim of financial forecast superiority.
+
 The disagreement between Energy Score and interval score is substantively useful.
 Energy Score assesses the multivariate predictive distribution, whereas the
 marginal interval score rewards coverage and sharpness asset by asset. During the
@@ -1615,9 +1783,11 @@ of this empirical loss cannot establish full joint or history-conditional
 calibration. The temporal term narrows one part of this gap by targeting selected
 lagged covariances, but finite zero autocovariances do not imply PIT independence.
 Moving-block resampling introduces an additional complication because artificial
-block boundaries can affect autocorrelation estimates; the corresponding
-uncertainty intervals are consequently interpreted as diagnostic rather than
-definitive.
+block boundaries can affect autocorrelation estimates. The 10/20/40-day
+sensitivity audit changed the zero-exclusion decision for PIT dependence and
+showed resampling bias relative to its observed point difference; the
+corresponding uncertainty intervals are therefore interpreted as diagnostic
+rather than definitive.
 
 The empirical scope is also deliberately limited. The financial evidence comes
 from two four-asset panels and one-step-ahead forecasts, while the chronological
@@ -1628,7 +1798,10 @@ evaluation windows. Similarly, the hierarchical bootstrap represents variation
 across neural optimization seeds and dependent forecast origins conditional on
 those design choices. Because each conventional benchmark is fitted once per
 panel, its reported comparisons do not integrate over baseline parameter-
-estimation uncertainty.
+estimation uncertainty. The isolated-scale simulation adds 50 independent
+datasets, but uses one neural seed per dataset and was designed after earlier
+developmental findings. Its MCSE therefore does not separate DGP from
+optimization variation or protect against post-selection of the shift family.
 
 Finally, the neural predictive law is Gaussian and does not explicitly encode
 the persistent conditional volatility or heavy tails characteristic of financial
@@ -1699,14 +1872,120 @@ not a dominance claim, nor evidence that the temporal PIT-moment penalty achieve
 PIT independence. It is a controlled demonstration that calibration-aware
 training can reproducibly improve its targeted finite-projection diagnostic while
 failing to improve---and sometimes worsening---proper scores and sequential
-adequacy. Its relative advantage under the synthetic frozen stress appears only
-after scale and dependence shifts become material, providing evidence of a
-robustness crossover rather than nominal dominance. Strong volatility-aware
+adequacy. In the completed post-protocol isolated-scale experiment, 50 paired
+realizations show a more precise robustness crossover: nominal near-parity gives
+way to lower NLL, Energy Score, variogram score, interval score, and analytic
+projected-PIT error for CA--RNN as test innovation scale rises. This is evidence
+for one isolated stress mechanism, not general dominance under distribution
+shift. Strong volatility-aware
 baselines, ablation across data-generating settings, and external confirmation
 are thus essential when evaluating calibration-aware neural forecasts.
 
 \newpage
 \appendix
+
+\section{Reproducibility and post-protocol evaluation audit}
+
+\subsection{Data, transformations, and chronological partitions}
+
+The development panel contains adjusted daily closing prices for AAPL, JPM,
+XOM, and WMT, requested for 2007-01-01 through 2026-01-01 (exclusive). After
+complete-case date alignment and one-day log differencing, it contains 4,779
+return observations from 2007-01-04 through 2025-12-31. The 60/20/20
+chronological split gives training (2,867 observations, 2007-01-04 to
+2018-05-23), validation (955, 2018-05-24 to 2022-03-09), and test (957,
+2022-03-10 to 2025-12-31). The observed adjusted-price span begins
+2007-01-03. The cleaning rule rejects any ticker with over 1\% missingness,
+then retains complete dates and positive prices. The panel is subject to
+survivorship-biased asset selection.
+
+The frozen external panel contains MSFT, BAC, CVX, and COST in that order.
+Its 4,945 aligned log-return observations run from 2007-01-04 through
+2026-08-31. The same split gives training (2,967 observations, 2007-01-04 to
+2018-10-15), validation (989, 2018-10-16 to 2022-09-20), and test (989,
+2022-09-21 to 2026-08-31). Each component is standardized using its own
+training-partition mean and sample standard deviation. A 20-observation
+historical context precedes each validation and test target; neither scaler
+nor fitted model sees the target or later observations during selection.
+
+\subsection{Model, randomization, and selection settings}
+
+The focused neural architecture is a one-layer, 32-hidden-unit GRU with a
+full-covariance Gaussian predictive head and minimum Cholesky diagonal scale
+$10^{-4}$. It uses a 20-day input history, AdamW learning rate $10^{-3}$,
+batch size 64, maximum 200 epochs, patience 25, and validation-NLL checkpoint
+selection in the repeated financial experiments. The CA--RNN loss weights are
+$\lambda_{\mathrm{cal}}=100$ and $\lambda_{\mathrm{seq}}=2000$; the PIT CDF grid has
+19 points, smoothing temperature 0.03, and five temporal lags. Projection
+directions comprise four coordinates, an equal-weight direction, and four
+random unit vectors generated with seed 606. The repeated financial and frozen
+external studies use neural training seeds 611, 619, 631, 641, 647, 653, 661,
+673, 683, and 691, forecast seed 20,606, and 500 draws per forecast origin.
+The original-panel hierarchical bootstrap uses 20-trading-day blocks, 2,000
+draws, and seed 808; the frozen panel uses the same block length and draw count
+with seed 1208. All paired comparisons reuse forecast-origin indices across
+models. The conventional benchmark selects VAR lag from $\{1,5,10,20\}$ by
+validation one-step MSE and then fits marginal GARCH$(1,1)$ and the joint
+standardized-residual resampling law on the training partition.
+
+The four rolling test windows are 2017--2019, 2020--2021, 2022--2023, and
+2024--2025. Their expanding training endpoints are, respectively, the ends of
+2014, 2016, 2019, and 2021; intervening validation periods are 2015--2016,
+2017--2019, 2020--2021, and 2022--2023. The regime training seeds are
+701, 709, 719, 727, and 733. Their
+1,000-draw hierarchical bootstraps are developmental rather than frozen
+confirmatory analyses. The four-model nonlinear demonstration instead uses
+1,200 observations, DGP and training seed 2027, 150 maximum epochs, and patience
+20. The original mixed scale-and-correlation curve uses DGP and training seed
+505, 120 maximum epochs, and patience 15; its single-realization interpretation
+remains exploratory.
+
+The completed post-protocol isolated-scale experiment is implemented in notebook
+14 and reported in Table~\ref{tab:isolated-scale}. It uses 50 independent
+Gaussian autoregressive realizations with DGP seeds 1000--1049, one distinct
+neural seed $606+b$ per realization $b=0,\ldots,49$, and common forecast seed
+20,606. Each series has 1,200 observations; the first 60\% train, the next
+20\% validate, and the final 20\% test. The shift begins exactly at the test
+boundary. Severities $\{0,0.5,1\}$ multiply the post-boundary innovation
+standard deviation by $1+\delta$ while holding correlation, autoregressive
+coefficients, and innovation family fixed. RNN and CA--RNN are fitted once per
+realization with 120 maximum epochs, patience 15, and validation-NLL
+checkpointing on the same unshifted training/validation history, then held fixed
+over severities. The run records failures and training time. For each severity,
+paired CA--RNN-minus-RNN differences are averaged across valid realizations,
+with Monte Carlo standard error $s_D/\sqrt{B}$. Prefixes of 10, 25, and 50
+realizations provide a replication-count sensitivity check. One neural seed
+per DGP realization means DGP and optimization variability are not separately
+identified in this experiment.
+
+\subsection{Evaluation definitions and protocol status}
+
+For a $d$-asset standardized target $y_t$ and forecast mean $\widehat\mu_t$,
+the reported component-averaged mean squared error is
+$\mathrm{MSE}=(Td)^{-1}\sum_{t,j}(y_{t,j}-\widehat\mu_{t,j})^2$ and
+$\mathrm{RMSE}=\sqrt{\mathrm{MSE}}$. A seed-level mean of RMSEs need not equal
+the square root of the corresponding seed-level mean MSE. Neural test NLL is
+the mean joint Gaussian negative log density, evaluated at held-out targets;
+for Bayesian models it is the negative log of a Monte Carlo predictive mixture.
+For a deterministic Gaussian forecast, projected PITs are evaluated analytically
+as $\Phi[(a^\top y_t-a^\top\mu_t)/\sqrt{a^\top\Sigma_t a}]$ in the new
+evaluation audit. The previously reported sample-rank PITs remain the frozen
+protocol measure and are not retrospectively replaced. The variogram score is
+reported as the mean over origins and unordered asset pairs of
+$(|y_{t,i}-y_{t,j}|^{1/2}-E_F|Y_i-Y_j|^{1/2})^2$; the expectation is estimated
+from forecast draws. Notebook 15 checks sensitivity of developmental paired
+intervals to block lengths 10, 20, and 40, holding the forecast arrays fixed.
+These additions are secondary, post-protocol audits, not new primary outcomes.
+
+The frozen primary protocol is preserved verbatim at
+\texttt{docs/confirmatory\_protocol.md}; its SHA-256 digest is
+\texttt{20a0531461992b11d702d5b72b51c57a5e9b162e84dd5f6e6e34e5fadec570b0}.
+Its historical ``sequential CA--RNN'' label denotes the unchanged full
+projected-plus-temporal objective now called CA--RNN. The protocol fixes the
+external assets and date boundary, architecture, penalties, seeds, forecast
+draws, primary metrics, and 20-day hierarchical bootstrap. No new analytic
+PIT, NLL, variogram, or sensitivity result supersedes its originally frozen
+sample-PIT and proper-score comparisons.
 
 \begin{thebibliography}{99}
 
@@ -1793,6 +2072,44 @@ V. Kuleshov, N. Fenner, and S. Ermon,
 \emph{Proceedings of the 35th International Conference on Machine Learning},
 vol. 80, pp. 2796--2804, 2018.
 \href{https://proceedings.mlr.press/v80/kuleshov18a.html}{PMLR article page}.
+
+\bibitem{utpala2020quantile}
+S. Utpala and P. Rai,
+``Quantile Regularization: Towards Implicit Calibration of Regression Models,''
+\emph{arXiv preprint arXiv:2002.12860}, 2020.
+\href{https://arxiv.org/abs/2002.12860}{arXiv:2002.12860}.
+
+\bibitem{dheur2023large}
+J. Dheur and S. Ben Taieb,
+``A Large-Scale Study of Probabilistic Calibration in Neural Network Regression,''
+in \emph{Proceedings of the 40th International Conference on Machine Learning},
+vol. 202, pp. 7813--7836, 2023.
+\href{https://proceedings.mlr.press/v202/dheur23a.html}{PMLR article page}.
+
+\bibitem{dheur2024design}
+J. Dheur and S. Ben Taieb,
+``Probabilistic Calibration by Design for Neural Network Regression,''
+in \emph{Proceedings of the 27th International Conference on Artificial
+Intelligence and Statistics}, vol. 238, pp. 3133--3141, 2024.
+\href{https://proceedings.mlr.press/v238/dheur24a.html}{PMLR article page}.
+
+\bibitem{allen2024multivariate}
+S. Allen, J. F. Ziegel, and D. Ginsbourger,
+``Assessing the Calibration of Multivariate Probabilistic Forecasts,''
+\emph{arXiv preprint arXiv:2307.05846}, 2024.
+\href{https://arxiv.org/abs/2307.05846}{arXiv:2307.05846}.
+
+\bibitem{desobry2025prerank}
+F. Desobry, A. Zhalieva, and S. Ben Taieb,
+``Enforcing Calibration in Multi-Output Probabilistic Regression with Pre-rank
+Regularization,'' \emph{arXiv preprint arXiv:2510.21273}, 2025.
+\href{https://arxiv.org/abs/2510.21273}{arXiv:2510.21273}.
+
+\bibitem{laajil2026prerank}
+A. Laajil, A. Zhalieva, F. Desobry, and S. Ben Taieb,
+``Calibrated Multivariate Distributional Regression with Pre-Rank
+Regularization,'' \emph{arXiv preprint arXiv:2601.22895}, 2026.
+\href{https://arxiv.org/abs/2601.22895}{arXiv:2601.22895}.
 
 \bibitem{salinas2020deepar}
 D. Salinas, V. Flunkert, J. Gasthaus, and T. Januschowski,

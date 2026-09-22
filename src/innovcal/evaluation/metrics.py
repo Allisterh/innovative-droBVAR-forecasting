@@ -33,6 +33,38 @@ def empirical_pits(
     ) / (samples.shape[0] + 1.0)
 
 
+def gaussian_projected_pits(
+    target: np.ndarray,
+    mean: np.ndarray,
+    scale_tril: np.ndarray,
+    projections: np.ndarray,
+) -> np.ndarray:
+    """Exact PITs for Gaussian linear projections, without forecast-draw noise."""
+    target = np.asarray(target, dtype=float)
+    mean = np.asarray(mean, dtype=float)
+    scale_tril = np.asarray(scale_tril, dtype=float)
+    projections = np.asarray(projections, dtype=float)
+    if (
+        target.ndim != 2
+        or mean.shape != target.shape
+        or scale_tril.shape != (len(target), target.shape[1], target.shape[1])
+        or projections.ndim != 2
+        or projections.shape[1] != target.shape[1]
+    ):
+        raise ValueError("incompatible Gaussian forecast and projection shapes")
+    if not all(np.isfinite(array).all() for array in (target, mean, scale_tril, projections)):
+        raise ValueError("Gaussian forecast and projections must be finite")
+    projected_scale = np.einsum("odk,rd->ork", scale_tril, projections)
+    standard_deviation = np.linalg.norm(projected_scale, axis=-1)
+    if np.any(standard_deviation <= 0):
+        raise ValueError("projected standard deviations must be positive")
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        z = ((target - mean) @ projections.T) / standard_deviation
+    if np.isnan(z).any():
+        raise ValueError("Gaussian projected standardized values contain NaN")
+    return stats.norm.cdf(z)
+
+
 def pit_diagnostics(pits: np.ndarray, max_lag: int = 5) -> dict[str, float]:
     pits = np.asarray(pits, dtype=float)
     if pits.ndim != 2:
@@ -66,6 +98,19 @@ def energy_score(target: np.ndarray, samples: np.ndarray, seed: int = 123) -> fl
     return float(np.mean(first - 0.5 * second))
 
 
+def variogram_score(
+    target: np.ndarray, samples: np.ndarray, power: float = 0.5
+) -> float:
+    """Mean normalized pairwise variogram score; lower is better."""
+    target, samples = _validate(target, samples)
+    if power <= 0 or target.shape[1] < 2:
+        raise ValueError("power must be positive and at least two assets are required")
+    left, right = np.triu_indices(target.shape[1], k=1)
+    observed = np.abs(target[:, left] - target[:, right]) ** power
+    predicted = np.mean(np.abs(samples[:, :, left] - samples[:, :, right]) ** power, axis=0)
+    return float(np.mean((observed - predicted) ** 2))
+
+
 def evaluate_samples(
     target: np.ndarray,
     samples: np.ndarray,
@@ -84,8 +129,10 @@ def evaluate_samples(
     coordinate_pits = empirical_pits(target, samples)
     projected_pits = empirical_pits(target, samples, projections)
     result = {
+        "mean_squared_error": float(np.mean((samples.mean(axis=0) - target) ** 2)),
         "rmse": float(np.sqrt(np.mean((samples.mean(axis=0) - target) ** 2))),
         "energy_score": energy_score(target, samples),
+        "variogram_score": variogram_score(target, samples),
         "coverage": float(np.mean((target >= lower) & (target <= upper))),
         "interval_width": float(np.mean(upper - lower)),
         "interval_score": float(np.mean(interval_score)),
