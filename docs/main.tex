@@ -55,8 +55,9 @@ projected probability integral transforms (PITs) and the uniform distribution
 and a temporal penalty on selected lagged PIT moments. CA-RNN is a conditional
 stochastic forecasting model: its recurrent
 state parameterizes a predictive distribution from which future observations can
-be sampled. The empirical design compares RNN, Bayesian RNN, CA-RNN, and
-calibration-aware Bayesian RNN, and then extends the comparison to model
+be sampled. The primary empirical comparison is between RNN and CA-RNN, with
+Bayesian variants retained as a supporting replication and VAR--GARCH as the
+principal econometric benchmark. The evaluation then extends to model
 misspecification and distribution shift. In a post-protocol simulation with 50
 independent datasets and an isolated innovation-scale shift, CA-RNN and RNN
 perform similarly at zero shift, whereas CA-RNN has lower Energy Score,
@@ -115,7 +116,7 @@ chronological market regimes and relative to likelihood-only neural and
 VAR--GARCH benchmarks?
 \end{quote}
 
-This question is decomposed into three focused empirical questions:
+This question is decomposed into four focused empirical questions:
 \begin{enumerate}[label=RQ\arabic*.]
     \item Across the prespecified calibration-weight grid, what tradeoff arises
     between projected calibration error and strictly proper predictive scores,
@@ -123,11 +124,14 @@ This question is decomposed into three focused empirical questions:
     \item What does removing CA--RNN's temporal PIT-moment penalty reveal about
     its effect on held-out sequential calibration error, Energy Score, marginal
     interval score, coverage, and point-forecast error?
-    \item Does CA--RNN add forecast value beyond the likelihood-only
-    RNN and VAR--GARCH on the development and frozen external asset panels, and
-    how does its performance relative to the RNN vary across four chronological
-    market regimes, as measured by projected and sequential calibration, Energy
-    Score, interval score, coverage, and point-forecast error?
+    \item Does CA--RNN add forecast value beyond the likelihood-only RNN and
+    VAR--GARCH on the development and frozen external asset panels, and how does
+    its performance relative to the RNN vary across four chronological market
+    regimes?
+    \item In a replicated experiment that changes only test-innovation scale,
+    how do the paired CA--RNN-minus-RNN differences in analytic projected-PIT
+    error, test NLL, Energy Score, variogram score, interval score, and MSE vary
+    with shift severity?
 \end{enumerate}
 
 \subsection{Contributions and novelty boundary}
@@ -238,6 +242,9 @@ regression regularizers, including a smoothed empirical PIT-CDF discrepancy
 \cite{dheur2023large}, and subsequently integrate recalibration into neural
 regression training \cite{dheur2024design}. A differentiable PIT-based loss is
 therefore not, by itself, a novel contribution of CA--RNN.
+Related quantile-regression work explicitly optimizes a calibration--sharpness
+tradeoff and provides another training-time continuous-outcome precedent
+\cite{chung2021pinball}.
 
 Huang, Park, and Simeone \cite{huang2024cabl} bring calibration directly into
 Bayesian neural learning.  Their calibration-aware objective combines a
@@ -305,6 +312,33 @@ optimized projected criterion transfer to proper scores, interval quality,
 tail-risk estimates, and an external asset panel. Its mixed findings delimit
 this adaptation rather than establishing a new general multivariate
 calibration method.
+
+Table~\ref{tab:related-positioning} makes the novelty boundary explicit. The
+distinction is not that recurrent networks alone make calibration sequential;
+it is that the loss and evaluation are applied to a filtration-indexed sequence
+of conditional forecasts and add finite lagged-PIT restrictions. These
+restrictions remain weaker than full conditional calibration.
+
+\begin{table}[ht]
+\centering
+\caption{Positioning relative to the closest calibration literature. ``Shift''
+means an explicit out-of-distribution or regime evaluation, not ordinary
+held-out testing.}
+\label{tab:related-positioning}
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+Work & Outcome & Training penalty & Multivariate pre-rank & Sequential/shift focus \\
+\midrule
+Huang et al.\ \cite{huang2024cabl} & Classes & Differentiable ECE & No & No \\
+Dheur--Ben Taieb \cite{dheur2023large} & Scalar regression & PIT-CDF & No & No \\
+Laajil et al.\ \cite{laajil2026prerank} & Vector regression & PIT-CDF & Yes & No; i.i.d. design \\
+This study & Vector time series & PIT-CDF plus lag moments & Fixed linear pre-ranks & Yes \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
 
 \section{Forecasting Setup and Calibration}
 
@@ -618,7 +652,12 @@ Both calibration terms in \eqref{eq:ca-rnn} define CA--RNN. The restriction
 $\lambda_{\mathrm{seq}}=0$ is used only as a loss-component ablation that removes
 the temporal PIT-moment penalty.
 
-\subsection{Bayesian CA-RNN objective}
+\subsection{Supporting Bayesian extension}
+
+The Bayesian construction is retained to mirror the CA-BNN comparison and test
+whether parameter averaging changes the calibration result. It is not the
+primary methodological or empirical claim of this paper; the main estimand is
+the frequentist RNN-versus-CA--RNN contrast.
 
 Let every scalar neural parameter have variational posterior and prior
 \[
@@ -1056,10 +1095,11 @@ analyses; it is not an additional frozen confirmatory replication.
 
 \section{Experimental Design}
 
-\subsection{Four-model replication matrix}
+\subsection{Primary comparison and supporting Bayesian replication}
 
-The core experiment follows the comparison logic of
-\cite{huang2024cabl}:
+The design follows the comparison logic of \cite{huang2024cabl}, but the first
+and third rows define the primary frequentist comparison. The Bayesian rows are
+supporting replications:
 \begin{table}[ht]
 \centering
 \caption{Mapping from calibration-aware classification to forecasting.}
@@ -1272,7 +1312,7 @@ completed the simulation, shift, financial, optimization-seed, and rolling-regim
 workflows. Successful execution establishes implementation consistency but is not
 itself statistical validation.
 
-\subsection{Four-model comparison}
+\subsection{Primary comparison and supporting Bayesian results}
 
 The refreshed matched nonlinear simulation showed that calibration-aware
 objectives alter the forecast distribution but do not yield uniform dominance.
@@ -1405,6 +1445,7 @@ with interval $[-0.00815,-0.00136]$, favoring CA-RNN.
 \caption{Mean financial performance over ten matched optimization seeds. Lower
 is better except for coverage, whose nominal target is 0.90.}
 \label{tab:seed-results}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lrrrrr}
 \toprule
 Model & RMSE & Energy & Interval & Coverage & PIT calibration \\
@@ -1414,6 +1455,7 @@ CA-RNN (temporal penalty removed) & 0.9504 & 1.1563 & 4.1191 & 0.8666 & 0.001306
 CA-RNN & 0.9479 & 1.1531 & 4.0816 & 0.8770 & 0.001225 \\
 \bottomrule
 \end{tabular}
+}
 \end{table}
 
 The temporal-penalty-removal ablation isolates the contribution of that objective
@@ -1568,6 +1610,17 @@ VAR--GARCH bootstrap & 0.8646 & 1.0713 & 3.7528 & 0.8928 & 0.000491 & 0.03270 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+The frozen table retains the protocol's sample-rank projected PIT diagnostic so
+that the prespecified primary outcome is not replaced after inspection. Exact
+Gaussian projected PIT and test-NLL audits are reported for the development-panel
+RNN and CA--RNN and for the replicated isolated-shift experiment, where the
+conditional Gaussian parameters were retained. They are not reconstructed from
+the external panel's saved forecast draws: samples alone do not identify the
+exact predictive density. Likewise, no NLL is assigned to the empirical
+VAR--GARCH residual bootstrap because it does not supply the same tractable
+parametric density. This is a comparability boundary, not a zero or missing
+performance result.
 
 For the prespecified primary contrast, CA-RNN reduced projected-PIT
 calibration error by $0.0000473$, with 95\% interval
@@ -1979,7 +2032,7 @@ These additions are secondary, post-protocol audits, not new primary outcomes.
 
 The frozen primary protocol is preserved verbatim at
 \texttt{docs/confirmatory\_protocol.md}; its SHA-256 digest is
-\texttt{20a0531461992b11d702d5b72b51c57a5e9b162e84dd5f6e6e34e5fadec570b0}.
+\nolinkurl{20a0531461992b11d702d5b72b51c57a5e9b162e84dd5f6e6e34e5fadec570b0}.
 Its historical ``sequential CA--RNN'' label denotes the unchanged full
 projected-plus-temporal objective now called CA--RNN. The protocol fixes the
 external assets and date boundary, architecture, penalties, seeds, forecast
@@ -2096,17 +2149,25 @@ Intelligence and Statistics}, vol. 238, pp. 3133--3141, 2024.
 \bibitem{allen2024multivariate}
 S. Allen, J. F. Ziegel, and D. Ginsbourger,
 ``Assessing the Calibration of Multivariate Probabilistic Forecasts,''
-\emph{arXiv preprint arXiv:2307.05846}, 2024.
-\href{https://arxiv.org/abs/2307.05846}{arXiv:2307.05846}.
+\emph{Quarterly Journal of the Royal Meteorological Society}, vol. 150,
+no. 760, pp. 1315--1335, 2024.
+\href{https://doi.org/10.1002/qj.4647}{doi:10.1002/qj.4647}.
+
+\bibitem{chung2021pinball}
+Y. Chung, W. Neiswanger, I. Char, and J. Schneider,
+``Beyond Pinball Loss: Quantile Methods for Calibrated Uncertainty
+Quantification,'' in \emph{Advances in Neural Information Processing Systems},
+vol. 34, 2021.
+\href{https://proceedings.neurips.cc/paper/2021/hash/5b168fdba5ee5ea262cc2d4c0b457697-Abstract.html}{NeurIPS article page}.
 
 \bibitem{desobry2025prerank}
-F. Desobry, A. Zhalieva, and S. Ben Taieb,
+N. Desobry, E. Zhalieva, and S. Ben Taieb,
 ``Enforcing Calibration in Multi-Output Probabilistic Regression with Pre-rank
 Regularization,'' \emph{arXiv preprint arXiv:2510.21273}, 2025.
 \href{https://arxiv.org/abs/2510.21273}{arXiv:2510.21273}.
 
 \bibitem{laajil2026prerank}
-A. Laajil, A. Zhalieva, F. Desobry, and S. Ben Taieb,
+A. Laajil, E. Zhalieva, N. Desobry, and S. Ben Taieb,
 ``Calibrated Multivariate Distributional Regression with Pre-Rank
 Regularization,'' \emph{arXiv preprint arXiv:2601.22895}, 2026.
 \href{https://arxiv.org/abs/2601.22895}{arXiv:2601.22895}.

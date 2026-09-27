@@ -228,6 +228,10 @@ logs/
 # Uncomment if you do not want compiled PDFs tracked
 # *.pdf
 
+# University manuscript: track only the compiled deliverable
+manuscript/**
+!manuscript/00-main.pdf
+
 # Project-specific data and outputs
 data/raw/
 data/processed/
