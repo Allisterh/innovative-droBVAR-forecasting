@@ -5,6 +5,7 @@ from innovcal.baselines import (
     VARModel,
     diagnose_var_garch,
     forecast_baselines,
+    forecast_gaussian_var,
     select_var_lag,
     var_spectral_radius,
 )
@@ -58,6 +59,18 @@ def test_baseline_forecasts_have_matched_shapes_and_are_reproducible():
         assert samples.shape == (40, 60, 2)
         assert np.isfinite(samples).all()
         assert np.allclose(samples, second.samples[name])
+
+
+def test_gaussian_var_returns_exact_distribution_parameters():
+    values = _var_data(length=300)
+    train, validation, test = values[:180], values[180:240], values[240:]
+    forecast = forecast_gaussian_var(train, validation, test)
+    assert forecast.selected_lag in {1, 5, 10, 20}
+    assert forecast.mean.shape == test.shape
+    assert forecast.covariance.shape == (2, 2)
+    assert np.allclose(forecast.covariance, forecast.covariance.T)
+    assert np.linalg.eigvalsh(forecast.covariance).min() > 0.0
+    assert np.isfinite(forecast.mean).all()
 
 
 def test_var_lag_selection_uses_validation_scores():

@@ -7,6 +7,7 @@ from innovcal.experiments.comparison import (
 )
 from innovcal.experiments.isolated_shift import (
     IsolatedScaleShiftConfig,
+    crossed_isolated_shift_inference,
     run_isolated_scale_shift,
     summarize_isolated_shift,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "run_frequentist_seed_comparison",
     "run_regime_seed_comparison",
     "IsolatedScaleShiftConfig",
+    "crossed_isolated_shift_inference",
     "run_isolated_scale_shift",
     "summarize_isolated_shift",
 ]

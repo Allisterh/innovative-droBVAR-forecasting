@@ -1,7 +1,8 @@
 """Leakage-aware training for the four paper-style model variants."""
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Callable, Iterable
 
 import numpy as np
 import torch
@@ -15,6 +16,7 @@ from innovcal.ca_rnn.losses import (
     projected_pits,
     sequential_calibration_loss,
 )
+from innovcal.ca_rnn.predict import predictive_nll
 
 
 @dataclass
@@ -22,6 +24,19 @@ class FitResult:
     history: list[dict[str, float]]
     best_epoch: int
     stopped_early: bool
+
+
+@dataclass
+class KLWeightSelectionResult:
+    """Validation-only selection result for a Bayesian KL weight."""
+
+    model: torch.nn.Module
+    fit: FitResult
+    selected_weight: float
+    validation_nll: dict[float, float]
+
+
+DEFAULT_KL_WEIGHT_GRID = (0.0001, 0.001, 0.01, 0.1, 1.0)
 
 
 def _batch_objective(model, context, target, projections, config, n_train):
@@ -117,3 +132,80 @@ def fit_model(
     elif not config.early_stopping:
         best_epoch = len(history)
     return FitResult(history, best_epoch, len(history) < config.epochs)
+
+
+def fit_bayesian_model_with_kl_selection(
+    model_factory: Callable[[], torch.nn.Module],
+    train_dataset,
+    validation_dataset,
+    config: TrainingConfig,
+    kl_weights: Iterable[float] = DEFAULT_KL_WEIGHT_GRID,
+    projections: torch.Tensor | None = None,
+    device: str | torch.device = "cpu",
+    n_validation_weight_samples: int = 50,
+) -> KLWeightSelectionResult:
+    """Select a Bayesian KL weight using chronological validation NLL only.
+
+    Each candidate starts from the same random initialization and sees the same
+    ordered mini-batches. Within each candidate, deterministic validation NLL
+    at posterior-mean weights selects the epoch checkpoint. After that
+    checkpoint is restored, Monte Carlo posterior-predictive mixture validation
+    NLL selects the KL weight. The function deliberately accepts no test data,
+    preventing test-set leakage. Ties favor the smaller KL weight.
+    """
+    weights = tuple(float(weight) for weight in kl_weights)
+    if not weights:
+        raise ValueError("kl_weights must contain at least one candidate")
+    if len(set(weights)) != len(weights):
+        raise ValueError("kl_weights must not contain duplicate candidates")
+    if any(not np.isfinite(weight) or weight < 0 for weight in weights):
+        raise ValueError("kl_weights must be finite and nonnegative")
+    if n_validation_weight_samples < 1:
+        raise ValueError("n_validation_weight_samples must be positive")
+
+    validation_loader = DataLoader(
+        validation_dataset,
+        batch_size=len(validation_dataset),
+        shuffle=False,
+    )
+    validation_context, validation_target = next(iter(validation_loader))
+
+    candidates: dict[float, tuple[torch.nn.Module, FitResult]] = {}
+    validation_nll: dict[float, float] = {}
+    for weight in weights:
+        # Common random numbers make the comparison depend on the KL weight,
+        # rather than on different parameter initializations or batch draws.
+        torch.manual_seed(config.seed)
+        np.random.seed(config.seed)
+        model = model_factory()
+        fit = fit_model(
+            model,
+            train_dataset,
+            validation_dataset,
+            replace(config, kl_weight=weight, selection_metric="nll"),
+            projections,
+            device,
+        )
+        if fit.best_epoch < 1 or fit.best_epoch > len(fit.history):
+            raise RuntimeError("fit returned an invalid best epoch")
+        # Common posterior-sampling random numbers reduce selection noise.
+        torch.manual_seed(config.seed + 30_000)
+        score = predictive_nll(
+            model,
+            validation_context,
+            validation_target,
+            n_weight_samples=n_validation_weight_samples,
+        )
+        if not np.isfinite(score):
+            raise RuntimeError(f"validation NLL is not finite for KL weight {weight:g}")
+        candidates[weight] = (model, fit)
+        validation_nll[weight] = score
+
+    selected_weight = min(weights, key=lambda weight: (validation_nll[weight], weight))
+    selected_model, selected_fit = candidates[selected_weight]
+    return KLWeightSelectionResult(
+        model=selected_model,
+        fit=selected_fit,
+        selected_weight=selected_weight,
+        validation_nll=validation_nll,
+    )

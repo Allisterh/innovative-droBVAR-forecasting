@@ -46,14 +46,16 @@ def projected_pits(
     projected_mean = mean @ projections.T
     covariance = scale_tril @ scale_tril.transpose(-1, -2)
     variance = torch.einsum("rd,bdk,rk->br", projections, covariance, projections)
-    standardized = (projected_target - projected_mean) / variance.clamp_min(1e-12).sqrt()
+    standardized = (projected_target - projected_mean) / variance.clamp_min(
+        1e-12
+    ).sqrt()
     return 0.5 * (1.0 + torch.erf(standardized / math.sqrt(2.0)))
 
 
 def calibration_loss(
     pits: torch.Tensor, grid_size: int = 19, temperature: float = 0.03
 ) -> torch.Tensor:
-    """Smooth Cramér--von Mises discrepancy from projected PIT uniformity."""
+    """Smoothed finite-grid discrepancy from projected PIT uniformity."""
     if pits.ndim != 2 or grid_size < 2 or temperature <= 0:
         raise ValueError("invalid PIT array or calibration settings")
     grid = torch.linspace(
@@ -69,7 +71,7 @@ def calibration_loss(
 
 
 def sequential_calibration_loss(pits: torch.Tensor, max_lag: int = 5) -> torch.Tensor:
-    """Penalize serial covariance in centered projected PIT sequences."""
+    """Penalize selected lagged PIT moments centered at the uniform-law mean."""
     if pits.ndim != 2 or max_lag < 1:
         raise ValueError("invalid PIT array or lag count")
     centered = pits - 0.5

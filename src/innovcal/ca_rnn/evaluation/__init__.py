@@ -1,6 +1,7 @@
 """Downstream evaluation tools for CA-RNN forecasts."""
 
 from innovcal.ca_rnn.evaluation.tail_risk import (
+    paired_matched_seed_tail_risk_bootstrap,
     paired_seed_tail_risk_bootstrap,
     paired_tail_risk_bootstrap,
     portfolio_tail_forecasts,
@@ -9,6 +10,7 @@ from innovcal.ca_rnn.evaluation.tail_risk import (
 
 __all__ = [
     "paired_tail_risk_bootstrap",
+    "paired_matched_seed_tail_risk_bootstrap",
     "paired_seed_tail_risk_bootstrap",
     "portfolio_tail_forecasts",
     "summarize_tail_risk",

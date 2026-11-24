@@ -1,6 +1,7 @@
 """Matched RNN, BRNN, CA-RNN, and CA-BRNN experiments."""
 
 from dataclasses import dataclass, replace
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,7 @@ from innovcal.ca_rnn import (
     BayesianCARNN,
     CARNNConfig,
     TrainingConfig,
+    fit_bayesian_model_with_kl_selection,
     fit_model,
     predictive_nll,
     sample_forecasts,
@@ -35,6 +37,8 @@ class ExperimentResult:
     projections: torch.Tensor
     target: np.ndarray
     forecast_samples: dict[str, np.ndarray]
+    kl_selection: pd.DataFrame | None = None
+    selected_kl_weight: float | None = None
 
 
 def _test_arrays(dataset: WindowDataset) -> tuple[torch.Tensor, np.ndarray]:
@@ -52,8 +56,17 @@ def run_four_model_comparison(
     lambda_seq: float = 2000.0,
     n_forecast_samples: int = 500,
     device: str = "cpu",
+    bayesian_kl_grid: Iterable[float] | None = None,
 ) -> ExperimentResult:
-    """Fit the four variants used in the reference paper's comparison logic."""
+    """Fit the four variants used in the reference paper's comparison logic.
+
+    When ``bayesian_kl_grid`` is provided, one KL weight is selected using the
+    likelihood-only BRNN's chronological posterior-predictive validation NLL.
+    That same weight is then held fixed for CA-BRNN, preserving the controlled
+    comparison of the calibration penalty. Test observations are accessed only
+    after selection. Omitting the grid preserves the fixed-weight behavior in
+    ``training_config``.
+    """
     split = chronological_split(values)
     standardizer = Standardizer.fit(split.train)
     train, validation, test = partition_window_datasets(
@@ -71,18 +84,45 @@ def run_four_model_comparison(
         "CA-RNN": (CARNN, lambda_cal, lambda_seq),
         "CA-BRNN": (BayesianCARNN, lambda_cal, lambda_seq),
     }
+    kl_selection = None
+    selected_kl_weight = None
+    selected_brnn = None
+    if bayesian_kl_grid is not None:
+        selected_brnn = fit_bayesian_model_with_kl_selection(
+            lambda: BayesianCARNN(model_config),
+            train,
+            validation,
+            replace(training_config, lambda_cal=0.0, lambda_seq=0.0),
+            bayesian_kl_grid,
+            projections,
+            device,
+        )
+        selected_kl_weight = selected_brnn.selected_weight
+        kl_selection = pd.DataFrame(
+            {
+                "kl_weight": list(selected_brnn.validation_nll),
+                "validation_nll": list(selected_brnn.validation_nll.values()),
+            }
+        )
+        kl_selection["selected"] = kl_selection["kl_weight"].eq(selected_kl_weight)
+
     context, target = _test_arrays(test)
     rows, histories, models, forecasts = [], {}, {}, {}
     for name, (model_class, cal_weight, seq_weight) in specifications.items():
-        # The same initialization seed is reused within deterministic/Bayesian pairs.
-        torch.manual_seed(training_config.seed)
-        model = model_class(model_config)
         config = replace(
             training_config,
             lambda_cal=cal_weight,
             lambda_seq=seq_weight,
         )
-        result = fit_model(model, train, validation, config, projections, device)
+        if name == "BRNN" and selected_brnn is not None:
+            model, result = selected_brnn.model, selected_brnn.fit
+        else:
+            # The same initialization seed is reused within matched model pairs.
+            torch.manual_seed(training_config.seed)
+            model = model_class(model_config)
+            if name == "CA-BRNN" and selected_kl_weight is not None:
+                config = replace(config, kl_weight=selected_kl_weight)
+            result = fit_model(model, train, validation, config, projections, device)
         torch.manual_seed(training_config.seed + 10_000)
         test_nll = predictive_nll(model, context, torch.as_tensor(target), 50)
         torch.manual_seed(training_config.seed + 20_000)
@@ -103,6 +143,8 @@ def run_four_model_comparison(
         projections,
         target,
         forecasts,
+        kl_selection,
+        selected_kl_weight,
     )
 
 

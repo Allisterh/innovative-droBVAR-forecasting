@@ -1,6 +1,7 @@
 """Frozen-model distribution-shift experiments for CA-RNN variants."""
 
 from dataclasses import dataclass
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -33,6 +34,7 @@ def run_shift_curve(
     sequential_weight: float | None = 2000.0,
     n_forecast_samples: int = 500,
     device: str = "cpu",
+    bayesian_kl_grid: Iterable[float] | None = None,
 ) -> pd.DataFrame:
     """Fit once on the reference law and evaluate frozen models under shift.
 
@@ -62,6 +64,7 @@ def run_shift_curve(
         lambda_seq=sequential_weight or 0.0,
         n_forecast_samples=n_forecast_samples,
         device=device,
+        bayesian_kl_grid=bayesian_kl_grid,
     )
     rows = []
     for severity in severities:
@@ -101,6 +104,14 @@ def run_shift_curve(
                     "lambda_cal": lambda_cal if name.startswith("CA-") else 0.0,
                     "lambda_seq": (
                         sequential_weight if name in {"CA-RNN", "CA-BRNN"} else 0.0
+                    ),
+                    "kl_weight": (
+                        fitted.selected_kl_weight
+                        if name in {"BRNN", "CA-BRNN"}
+                        and fitted.selected_kl_weight is not None
+                        else training_config.kl_weight
+                        if name in {"BRNN", "CA-BRNN"}
+                        else np.nan
                     ),
                     "nll": nll,
                     **metrics,

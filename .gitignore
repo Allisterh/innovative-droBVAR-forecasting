@@ -261,3 +261,5 @@ logs/
 
 # Environment files
 .env
+
+reproducibility/

@@ -13,15 +13,24 @@ from innovcal.ca_rnn.predict import (
     predictive_nll,
     sample_forecasts,
 )
-from innovcal.ca_rnn.trainer import FitResult, fit_model
+from innovcal.ca_rnn.trainer import (
+    DEFAULT_KL_WEIGHT_GRID,
+    FitResult,
+    KLWeightSelectionResult,
+    fit_bayesian_model_with_kl_selection,
+    fit_model,
+)
 
 __all__ = [
     "BayesianCARNN",
     "CARNN",
     "CARNNConfig",
+    "DEFAULT_KL_WEIGHT_GRID",
     "FitResult",
+    "KLWeightSelectionResult",
     "TrainingConfig",
     "calibration_loss",
+    "fit_bayesian_model_with_kl_selection",
     "fit_model",
     "gaussian_nll",
     "predict_distribution",

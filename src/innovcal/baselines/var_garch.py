@@ -151,6 +151,21 @@ class BaselineForecasts:
 
 
 @dataclass(frozen=True)
+class GaussianVARForecast:
+    """Exact one-step Gaussian VAR distribution on a held-out block."""
+
+    model: VARModel
+    validation_mse: dict[int, float]
+    mean: np.ndarray
+    covariance: np.ndarray
+    target: np.ndarray
+
+    @property
+    def selected_lag(self) -> int:
+        return self.model.lag
+
+
+@dataclass(frozen=True)
 class BaselineDiagnostics:
     """Training-sample specification checks for the fitted VAR--GARCH model."""
 
@@ -291,6 +306,31 @@ def select_var_lag(
     return min(scores, key=scores.get), scores
 
 
+def forecast_gaussian_var(
+    train: np.ndarray,
+    validation: np.ndarray,
+    test: np.ndarray,
+    *,
+    lag_candidates: Iterable[int] = (1, 5, 10, 20),
+) -> GaussianVARForecast:
+    """Return the exact fixed-covariance Gaussian VAR predictive law.
+
+    Lag selection uses validation one-step MSE. The selected model and its
+    innovation covariance are fitted on the training block only. Test means are
+    one-step forecasts that may condition on earlier observed test outcomes.
+    """
+    train, validation, test = _series(train), _series(validation), _series(test)
+    if train.shape[1] != validation.shape[1] or train.shape[1] != test.shape[1]:
+        raise ValueError("all partitions must have the same dimension")
+    lag, scores = select_var_lag(train, validation, lag_candidates)
+    model = VARModel.fit(train, lag)
+    covariance = np.cov(model.residuals, rowvar=False, ddof=1)
+    covariance = np.atleast_2d(covariance) + np.eye(train.shape[1]) * 1e-8
+    prefix = np.concatenate([train, validation], axis=0)
+    means = _one_step_means(model, prefix[-lag:], test)
+    return GaussianVARForecast(model, scores, means, covariance, test.copy())
+
+
 def forecast_baselines(
     train: np.ndarray,
     validation: np.ndarray,
@@ -307,8 +347,12 @@ def forecast_baselines(
     if n_samples < 2:
         raise ValueError("n_samples must be at least two")
 
-    lag, scores = select_var_lag(train, validation, lag_candidates)
-    model = VARModel.fit(train, lag)
+    gaussian = forecast_gaussian_var(
+        train, validation, test, lag_candidates=lag_candidates
+    )
+    lag = gaussian.selected_lag
+    scores = gaussian.validation_mse
+    model = gaussian.model
     rng = np.random.default_rng(seed)
     cases, dimension = test.shape
 
@@ -318,10 +362,8 @@ def forecast_baselines(
     historical = centered_train[indices]
 
     # Fixed-covariance Gaussian VAR.
-    covariance = np.cov(model.residuals, rowvar=False, ddof=1)
-    covariance = np.atleast_2d(covariance) + np.eye(dimension) * 1e-8
-    test_prefix = np.concatenate([train, validation], axis=0)
-    means = _one_step_means(model, test_prefix[-lag:], test)
+    covariance = gaussian.covariance
+    means = gaussian.mean
     eigenvalues, eigenvectors = np.linalg.eigh(covariance)
     covariance_root = eigenvectors @ np.diag(np.sqrt(np.maximum(eigenvalues, 1e-10)))
     gaussian_noise = np.einsum(

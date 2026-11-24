@@ -19,7 +19,7 @@ def empirical_pits(
     samples: np.ndarray,
     projections: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Compute randomized-rank PITs after optional linear projection."""
+    """Compute Jeffreys-smoothed empirical-CDF PITs after linear projection."""
     target, samples = _validate(target, samples)
     if projections is None:
         projections = np.eye(target.shape[1])
@@ -73,18 +73,25 @@ def pit_diagnostics(pits: np.ndarray, max_lag: int = 5) -> dict[str, float]:
     cdf = np.mean(pits[:, None, :] <= grid[None, :, None], axis=0)
     calibration_error = float(np.mean((cdf - grid[:, None]) ** 2))
     centered = pits - 0.5
-    autocorrelations = []
+    normalized_lagged_moments = []
     for lag in range(1, min(max_lag, len(pits) - 1) + 1):
         numerator = np.mean(centered[lag:] * centered[:-lag], axis=0)
         denominator = np.mean(centered**2, axis=0)
-        autocorrelations.extend(np.abs(numerator / np.maximum(denominator, 1e-12)))
+        normalized_lagged_moments.extend(
+            np.abs(numerator / np.maximum(denominator, 1e-12))
+        )
     ks = [
         stats.kstest(pits[:, index], "uniform", method="asymp").statistic
         for index in range(pits.shape[1])
     ]
     return {
         "pit_calibration_error": calibration_error,
-        "pit_mean_absolute_autocorrelation": float(np.mean(autocorrelations)) if autocorrelations else 0.0,
+        # Retain the legacy result-column key for artifact compatibility.
+        "pit_mean_absolute_autocorrelation": (
+            float(np.mean(normalized_lagged_moments))
+            if normalized_lagged_moments
+            else 0.0
+        ),
         "pit_mean_ks": float(np.mean(ks)),
     }
 
